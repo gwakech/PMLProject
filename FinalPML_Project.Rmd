@@ -1,0 +1,140 @@
+---
+title: "Practical Machine Learning Project"
+author: "George Akech"
+date: "October 25, 2016"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+###Project Introduction
+####Background
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement - a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset).
+```{r }
+```
+####Data
+
+The training data for this project are available here:
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+
+The test data are available here: https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+
+The data for this project come from this source: http://groupware.les.inf.puc-rio.br/har. If you use the document you create for this class for any purpose please cite them as they have been very generous in allowing their data to be used for this kind of assignment.
+```{r  }
+```
+####Goal
+The goal of your project is to predict the manner in which they did the exercise. This is the "classe" variable in the training set. You may use any of the other variables to predict with. You should create a report describing how you built your model, how you used cross validation, what you think the expected out of sample error is, and why you made the choices you did. You will also use your prediction model to predict 20 different test cases.
+
+```{r Loading Required files}
+setwd("C:/Users/wasonga/Desktop/PML/Project")
+library(caret)
+library(rpart)
+library(rpart.plot)
+library(RColorBrewer)
+library(rattle)
+library(randomForest)
+library(knitr)
+
+```
+```{r Getting and loading data}
+if(!file.exists("./training.csv")) {
+url.training <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+download.file(url.training, destfile = "./training.csv")
+}
+if(!file.exists("./testing.csv")){
+url.testing <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"  
+download.file(url.testing, destfile = "./testing.csv")
+}
+```
+
+```{r setting training and testing data}
+set.seed(12345)
+training <- read.csv("./training.csv",na.strings = c("NA","#DIV/0!", " "),stringsAsFactors = FALSE)
+testing <- read.csv("./testing.csv",na.strings = c("NA","#DIV/0!", " "),stringsAsFactors = FALSE )
+```
+Partioning the training set into two
+```{r Partitioning training into two sets}
+inTrain <- createDataPartition(training$classe, p=0.6, list=FALSE)
+m1Training <- training[inTrain, ]
+m1Testing <- testing[-inTrain, ]
+```
+partioned Training and Testing data
+```{r Training and Testing data}
+dim(m1Training)
+dim(m1Testing)
+```
+#####Cleaning up the data
+
+```{r cleanup variables }
+training <- m1Training[, colSums(is.na(training)) == 0]
+testing <- m1Testing[, colSums(is.na(testing)) == 0]
+```
+We  remove the first seven predictors since these variables have little predicting power for the outcome classe.
+```{r  Removing variables with little predicting}
+trainData <- training[, -c(1:5)]
+testData <- testing[, -c(1:5)]
+dim(trainData); dim(testData)
+```
+The cleaned data sets trainData and testData both have 55 columns with the same first 54 variables and the last variable classe and problem_id individually. trainData has 11776 rows while testData has 11 rows.
+```{r }
+```
+#####Data spliting
+In order to get out-of-sample errors, we split the cleaned training set trainData into a training set (train, 70%) for prediction and a validation set (valid 30%) to compute the out-of-sample errors.
+```{r Data Splitting}
+set.seed(7846) 
+inTrain <- createDataPartition(trainData$classe, p = 0.7, list = FALSE)
+train <- trainData[inTrain, ]
+valid <- trainData[-inTrain, ]
+```
+###Prediction Algorithms
+
+We use classification trees and random forests to predict the outcome.
+
+####Classification trees
+In practice, k=5 or k=10 when doing k-fold cross validation. Here we consider 5-fold cross validation (default setting in trainControl function is 10) when implementing the algorithm to save a little computing time. Since data transformations may be less important in non-linear models like classification trees, we do not transform any variables.
+
+```{r Classification}
+control <- trainControl(method = "cv", number = 5)   
+fit_rpart <- train(classe ~ ., data = train, method = "rpart", 
+                   trControl = control)
+print(fit_rpart, digits = 4)
+fancyRpartPlot(fit_rpart$finalModel)
+#Predict outcomes using validation set
+predict_rpart <- predict(fit_rpart, valid)
+#Show prediction result
+(conf_rpart <- confusionMatrix(valid$classe, predict_rpart))
+(accuracy_rpart <- conf_rpart$overall[1])
+```
+From the confusion matrix, the accuracy rate is 0.60, and so the out-of-sample error rate is 0.60. Using classification tree does not predict the outcome classe very well.
+```{r}
+```
+####Random Forests
+classification tree method did not perform well, we try using  random forest method instead
+```{r Random Forest}
+fit_rf <- train(classe ~ ., data = train, method = "rf", 
+                   trControl = control)
+print(fit_rf, digits = 4)
+# predict outcomes using validation set
+predict_rf <- predict(fit_rf, valid)
+# Show prediction result
+(conf_rf <- confusionMatrix(valid$classe, predict_rf))
+(accuracy_rf <- conf_rf$overall[1])
+
+```
+####Conclusion
+Classification result from this dataset, random forest method is better than classification tree method. The accuracy rate is 0.994, and so the out-of-sample error rate is 0.006. This may be due to the fact that many predictors are highly correlated.
+
+Random forests chooses a subset of predictors at each split and decorrelate the trees. The methods leads to high accuracy, although the algorithm is sometimes difficult to interpret and computationally inefficient.
+
+```{r  }
+```
+####Prediction on Testing Set
+
+We use random forests to predict the outcome variable classe for the testing set.
+```{r Prediction on test set}
+(predict(fit_rf, testData))
+
+
+```
+
